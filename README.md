@@ -4,7 +4,7 @@ A high-performance Python backend for real-time competitive quiz platforms with 
 
 ## 🎯 Overview
 
-Real-Time Quiz Competition is a Flask-based backend system designed to handle multi-team quiz competitions with live leaderboard updates, mystery box challenges, and robust concurrency control. Built to scale and tested under high concurrent loads.
+Real-Time Quiz Competition is a FastAPI-based backend system designed to handle multi-team quiz competitions with live leaderboard updates, mystery box challenges, and robust concurrency control. Built to scale and tested under high concurrent loads.
 
 ## ✨ Key Features
 
@@ -60,7 +60,7 @@ Real-Time Quiz Competition is a Flask-based backend system designed to handle mu
 - Python 3.9 or higher
 - pip (Python package manager)
 - PostgreSQL/MySQL database
-- Node.js (for running tests)
+- K6 (for running load tests)
 
 ## 🚀 Quick Start
 
@@ -91,7 +91,7 @@ Create a `.env` file in the root directory:
 ```env
 DATABASE_URL=postgresql://username:password@localhost:5432/mpl_db
 SECRET_KEY=your-secret-key-here
-FLASK_ENV=development
+ENVIRONMENT=development
 ```
 
 ### 5. Initialize Database
@@ -252,23 +252,22 @@ ws.onmessage = (event) => {
 
 ## 🧪 Testing
 
-### Run Unit Tests
+### Install K6
 ```bash
-# Install Node.js dependencies for tests
-npm install
+# macOS
+brew install k6
 
-# Run individual test suites
-npm test tests/admin_test.js
-npm test tests/team_endpoints_test.js
-npm test tests/mystery_test.js
+# Windows
+choco install k6
 
-# Run complete system test
-npm test tests/complete_system_test.js
+# Linux
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update
+sudo apt-get install k6
 ```
 
-### Load Testing
-The project includes K6-compatible load tests:
-
+### Run Load Tests
 ```bash
 # Test concurrent team registrations
 k6 run tests/team_endpoints_test.js
@@ -278,28 +277,36 @@ k6 run tests/mystery_test.js
 
 # Complete system load test
 k6 run tests/complete_system_test.js
+
+# Test admin operations
+k6 run tests/admin_test.js
 ```
 
 **Expected Performance:**
 - Handles 280+ concurrent team registrations
 - Zero duplicate question assignments
-- Average response time: <150ms
-- P95 response time: <200ms
+- Average response time: <150ms (simple operations)
+- P95 response time: <500ms (team registration)
 
 ## 🔒 Concurrency & Data Integrity
 
-### Pessimistic Locking
+### Database Transactions
 ```python
 # Prevents race conditions in question assignment
+from sqlalchemy.orm import Session
+from fastapi import Depends
+
 @app.post('/admin/teams/question')
 async def get_question(request: QuestionRequest, db: Session = Depends(get_db)):
-    async with db.begin():
-        # Lock question row to prevent concurrent access
-        question = await Question.query.with_for_update().get(question_id)
-        
-        # Atomic assignment
-        team.assigned_question = question
-        await db.commit()
+    # Use database transaction for atomic operations
+    question = db.query(Question).filter(
+        Question.id == request.questionId,
+        Question.assigned_to == None
+    ).with_for_update().first()
+    
+    if question:
+        question.assigned_to = team.id
+        db.commit()
 ```
 
 ### Database Constraints
@@ -469,9 +476,8 @@ The system has been rigorously tested under various concurrent load scenarios us
 - [ ] Admin dashboard UI
 - [ ] Docker containerization
 - [ ] CI/CD pipeline with GitHub Actions
-- [ ] API rate limiting with Flask-Limiter
+- [ ] API rate limiting
 - [ ] Comprehensive logging with ELK stack
-
 
 ## 📝 License
 
@@ -495,5 +501,4 @@ For questions, issues, or suggestions:
 
 ---
 
-⚡ Built with Flask | 🚀 Tested under load | 🔒 Production-ready#   M P L _ d e p l o y m e n t  
- 
+⚡ Built with FastAPI | 🚀 Tested under load | 🔒 Production-ready
